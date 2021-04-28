@@ -1,0 +1,3 @@
+[submodule "ultility/dynamicwrapper"]
+	path = ultility/dynamicwrapper
+	url = https://github.com/FongAnthonyM/python-dynamicwrapper.git
