@@ -121,13 +121,13 @@ class AdvancedLogger(dynamicwrapper.DynamicWrapper):
 
         self.quick_check = False
         self.levels = self.default_levels.copy()
-        self.module_of_class = module_of_class
+        self.module_of_class = "(Not Given)"
         self.module_of_object = "(Not Given)"
         self.allow_append = False
         self.append_message = ""
 
         if init:
-            self.construct(obj=obj)
+            self.construct(obj, module_of_class)
 
     @property
     def name_parent(self):
@@ -175,12 +175,14 @@ class AdvancedLogger(dynamicwrapper.DynamicWrapper):
 
     # Methods
     # Constructors/Destructors
-    def construct(self, obj=None):
+    def construct(self, obj=None, module_of_class="(Not Given)"):
         """Constructs this object.
 
         Args:
             obj: The logger that this object will wrap or the name of the logger to create.
+            module_of_class (str): The name of the module of the class this logger originates from.
         """
+        self.module_of_class = module_of_class
         if isinstance(obj, logging.Logger):
             self._logger = obj
         else:
@@ -422,6 +424,123 @@ class AdvancedLogger(dynamicwrapper.DynamicWrapper):
             self.log(level, trace_msg, *args, append=append, **kwargs)
 
 
+class WarningsLogger(AdvancedLogger):
+    _warnings_showwarning = None
+    _current_showwarning = None
+    capturing = False
+    logger_name = "py.warnings"
+    warning_handler = None
+
+    # Class Methods
+    @classmethod
+    def capture_warnings(cls, capture=True):
+        """Determines if warnings will be redirected to the logging package.
+
+        The redirect is a global effect and logs to specifically to the 'py.warnings' logger.
+
+        Args:
+            capture (bool, optional): Determines if warnings will be redirected to the logging package.
+        """
+        if capture:
+            if cls._warnings_showwarning is None:
+                cls._warnings_showwarning = warnings.showwarning
+                cls.set_showwarning()
+                cls.capturing = True
+        else:
+            if cls._warnings_showwarning is not None:
+                warnings.showwarning = cls._warnings_showwarning
+                cls.capturing = False
+
+    # Create
+    @classmethod
+    def create_warning_handler(cls, name=None):
+        if name is None:
+            name = cls.logger_name
+
+        def warning_handler(message, category, filename, lineno, line):
+            s = warnings.formatwarning(message, category, filename, lineno, line)
+            logger = logging.getLogger(name)
+            if not logger.handlers:
+                logger.addHandler(logging.NullHandler())
+            logger.warning("%s", s)
+
+        return warning_handler
+
+    @classmethod
+    def create_showwarning(cls, warning_handler=None):
+        # Check if original warnings.showwarning function is saved.
+        if cls._warnings_showwarning is None:
+            raise NotImplementedError("capture warnings must be enabled before creating showwarning")
+
+        # Variables to create showwarning with
+        if warning_handler is None:
+            warning_handler = cls.warning_handler
+        _warnings_showwarning = cls._warnings_showwarning
+
+        # Create showwarning
+        def showwarning(message, category, filename, lineno, file=None, line=None):
+            if file is not None:
+                _warnings_showwarning(message, category, filename, lineno, file, line)
+            else:
+                warning_handler(message, category, filename, lineno, line)
+
+        return showwarning
+
+    # Setter/Getters
+    @classmethod
+    def set_warning_handler(cls, warning_handler=None):
+        if warning_handler is None:
+            warning_handler = cls.create_warning_handler()
+
+        # Set cls.warning_handler to the new showwarning
+        if cls.warning_handler is not None:
+            del cls.warning_handler
+        cls.warning_handler = warning_handler
+
+    @classmethod
+    def set_showwarning(cls, showwarning=None, warning_handler=None):
+        # Creates showwarning if showwarning is not given
+        if showwarning is None:
+            if warning_handler is None:
+                cls.set_warning_handler(warning_handler)
+            showwarning = cls.create_showwarning(warning_handler)
+
+        # Set cls._current_showwarning to the new showwarning
+        if cls._current_showwarning is not None:
+            del cls._current_showwarning
+        cls._current_showwarning = showwarning
+
+        # Sets warnings.showwarning
+        warnings.showwarning = showwarning
+
+    @classmethod
+    def set_logger_name(cls, name):
+        cls.logger_name = name
+        if cls.capturing:
+            if cls._current_showwarning is not None:
+                del cls._current_showwarning
+            cls._current_showwarning = cls.create_showwarning(name)
+            warnings.showwarning = cls._current_showwarning
+
+    def __init__(self, obj=None, module_of_class="(Not Given)", capture=False, init=True):
+        super().__init__(init=False)
+
+        if init:
+            self.construct(obj, module_of_class, capture)
+
+    def construct(self, obj=None, module_of_class="(Not Given)", capture=False):
+        super().construct(obj, module_of_class)
+        if capture:
+            self.capture_warnings()
+
+    def create_warning_handler(self, name=None):
+        def warning_handler(message, category, filename, lineno, line):
+            s = warnings.formatwarning(message, category, filename, lineno, line)
+            self.warning("%s", s)
+
+        return warning_handler
+
+
 # Todo: Add Performance Testing (logging?)
 class PerformanceLogger(AdvancedLogger):
     default_timer = time.perf_counter
@@ -560,39 +679,56 @@ def _rebuild_handlers(handlers):
     for handler in handlers:
         if isinstance(handler, logging.handlers.QueueHandler):
             kwargs = {"queue", handler.queue}
+
         elif isinstance(handler, logging.handlers.BufferingHandler):
             kwargs = {"capacity": handlers.capacity}
+
         elif isinstance(handler, logging.handlers.HTTPHandler):
             kwargs = {"host": handler.host, "url": handler.url, "method": handler.method, "secure": handler.secure,
                       "credentials": handler.credentials, "context": handler.context}
+
         elif isinstance(handler, logging.handlers.NTEventLogHandler):
             kwargs = {"appname": handler.appname, "dllname": handler.dllname, "logtype": handler.logtype}
+
         elif isinstance(handler, logging.handlers.SMTPHandler):
             kwargs = {"mailhost": handler.mailhost, "fromaddr": handler.fromaddr, "toaddrs": handler.toaddrs,
                       "subject": handler.subject, "credentials": handler.credentials, "secure": handler.secure,
                       "timeout": handler.timeout}
+
         elif isinstance(handler, logging.handlers.SysLogHandler):
             kwargs = {"address": handler.address, "facility": handler.facility, "socktype": handler.socktype}
+
         elif isinstance(handler, logging.handlers.SocketHandler):
             kwargs = {"host": handler.host, "port": handler.port}
+
         elif isinstance(handler, logging.FileHandler):
             kwargs = {"filename": handler.baseFilename, "mode": handler.mode,
                       "encoding": handler.encoding, "delay": handler.delay}
+
         elif isinstance(handler, logging.StreamHandler):
             kwargs = {}
             warnings.warn("StreamHandler stream cannot be pickled, using default stream (Hint: Define StreamHandler in Process)")
+
         else:
             warnings.warn()
             continue
+
         new_handler = type(handler)(**kwargs)
         new_handler.__dict__.update(handler.__dict__)
         new_handlers.append(new_handler)
+
     return new_handlers
 
 
 # Main #
 if __name__ == "__main__":
-    # Example
+    # WarningLogger Example
+    warning_logger = WarningsLogger("example_warning", capture=True)
+    warning_logger.add_default_file_handler("example_waring")
+
+    warnings.warn("This is a Test")
+
+    # ObjectWithLogging Example
     # Define Classes
     class Example(ObjectWithLogging):
         class_loggers = {"example_root": AdvancedLogger("example_root")}
