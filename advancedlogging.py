@@ -79,10 +79,11 @@ class AdvancedLogger(dynamicwrapper.DynamicWrapper):
         handlers (list): The handlers for this logger.
         disabled (bool): Determines if this logger will log.
 
-        allow_append (bool): Allows an additional message to be appended to all logs.
+        quick_check (bool): Determines if a check quick should be done instead of a full level check.
         levels (dict): The logging levels with their names mapped to their numerical values.
         module_of_class (str): The name of module the class originates from.
         module_of_object (str): The name of the module this object originates from.
+        allow_append (bool): Allows an additional message to be appended to all logs.
         append_message (str): A message to append to all logs.
 
     Args:
@@ -118,10 +119,11 @@ class AdvancedLogger(dynamicwrapper.DynamicWrapper):
     def __init__(self, obj=None, module_of_class="(Not Given)", init=True):
         self._logger = None
 
-        self.allow_append = False
+        self.quick_check = False
         self.levels = self.default_levels.copy()
         self.module_of_class = module_of_class
         self.module_of_object = "(Not Given)"
+        self.allow_append = False
         self.append_message = ""
 
         if init:
@@ -307,10 +309,12 @@ class AdvancedLogger(dynamicwrapper.DynamicWrapper):
             **kwargs: The key word arguments for the original log method.
         """
         if isinstance(level, str):
-            level = self.get_level(level)
-        if append or (append is None and self.allow_append):
-            msg = self.append_message + msg
-        self._logger.log(level, msg, *args, **kwargs)
+            level = self.levels[level]
+
+        if not self.quick_check and level >= self.level:
+            if append or (append is None and self.allow_append):
+                msg = self.append_message + msg
+            self._logger.log(level, msg, *args, **kwargs)
 
     def debug(self, msg, *args, append=None, **kwargs):
         """Creates a debug log.
@@ -321,9 +325,10 @@ class AdvancedLogger(dynamicwrapper.DynamicWrapper):
             append (bool, optional): Determines if append message should be added. Defaults to attribute if left None.
             **kwargs: The key word arguments for the original log method.
         """
-        if append or (append is None and self.allow_append):
-            msg = self.append_message + msg
-        self._logger.debug(msg, *args, **kwargs)
+        if not self.quick_check and self.levels["DEBUG"] >= self.level:
+            if append or (append is None and self.allow_append):
+                msg = self.append_message + msg
+            self._logger.debug(msg, *args, **kwargs)
 
     def info(self, msg, *args, append=None, **kwargs):
         """Creates an info log.
@@ -334,9 +339,10 @@ class AdvancedLogger(dynamicwrapper.DynamicWrapper):
             append (bool, optional): Determines if append message should be added. Defaults to attribute if left None.
             **kwargs: The key word arguments for the original log method.
         """
-        if append or (append is None and self.allow_append):
-            msg = self.append_message + msg
-        self._logger.info(msg, *args, **kwargs)
+        if not self.quick_check and self.levels["INFO"] >= self.level:
+            if append or (append is None and self.allow_append):
+                msg = self.append_message + msg
+            self._logger.info(msg, *args, **kwargs)
 
     def warning(self, msg, *args, append=None, **kwargs):
         """Creates a warning log.
@@ -347,9 +353,10 @@ class AdvancedLogger(dynamicwrapper.DynamicWrapper):
             append (bool, optional): Determines if append message should be added. Defaults to attribute if left None.
             **kwargs: The key word arguments for the original log method.
         """
-        if append or (append is None and self.allow_append):
-            msg = self.append_message + msg
-        self._logger.warning(msg, *args, **kwargs)
+        if not self.quick_check and self.levels["WARNING"] >= self.level:
+            if append or (append is None and self.allow_append):
+                msg = self.append_message + msg
+            self._logger.warning(msg, *args, **kwargs)
 
     def error(self, msg, *args, append=None, **kwargs):
         """Creates an error log.
@@ -360,9 +367,10 @@ class AdvancedLogger(dynamicwrapper.DynamicWrapper):
             append (bool, optional): Determines if append message should be added. Defaults to attribute if left None.
             **kwargs: The key word arguments for the original log method.
         """
-        if append or (append is None and self.allow_append):
-            msg = self.append_message + msg
-        self._logger.error(msg, *args, **kwargs)
+        if not self.quick_check and self.levels["ERROR"] >= self.level:
+            if append or (append is None and self.allow_append):
+                msg = self.append_message + msg
+            self._logger.error(msg, *args, **kwargs)
 
     def critical(self, msg, *args, append=None, **kwargs):
         """Creates a critical log.
@@ -373,9 +381,10 @@ class AdvancedLogger(dynamicwrapper.DynamicWrapper):
             append (bool, optional): Determines if append message should be added. Defaults to attribute if left None.
             **kwargs: The key word arguments for the original log method.
         """
-        if append or (append is None and self.allow_append):
-            msg = self.append_message + msg
-        self._logger.critical(msg, *args, **kwargs)
+        if not self.quick_check and self.levels["CRITICAL"] >= self.level:
+            if append or (append is None and self.allow_append):
+                msg = self.append_message + msg
+            self._logger.critical(msg, *args, **kwargs)
 
     def exception(self, msg, *args, append=None, **kwargs):
         """Creates an exception log.
@@ -386,9 +395,10 @@ class AdvancedLogger(dynamicwrapper.DynamicWrapper):
             append (bool, optional): Determines if append message should be added. Defaults to attribute if left None.
             **kwargs: The key word arguments for the original log method.
         """
-        if append or (append is None and self.allow_append):
-            msg = self.append_message + msg
-        self._logger.exception(msg, *args, **kwargs)
+        if not self.quick_check and self.levels["EXCEPTION"] >= self.level:
+            if append or (append is None and self.allow_append):
+                msg = self.append_message + msg
+            self._logger.exception(msg, *args, **kwargs)
 
     # New Logger Methods
     def trace_log(self, class_, func, msg, *args, name="", level="DEBUG", append=None, **kwargs):
@@ -405,9 +415,11 @@ class AdvancedLogger(dynamicwrapper.DynamicWrapper):
             **kwargs: The key word arguments for the original log method.
         """
         if isinstance(level, str):
-            level = self.get_level(level)
-        trace_msg = f"{class_}({name}) -> {func}: {msg}"
-        self.log(level, trace_msg, *args, append=append, **kwargs)
+            level = self.levels[level]
+
+        if not self.quick_check and level >= self.level:
+            trace_msg = f"{class_}({name}) -> {func}: {msg}"
+            self.log(level, trace_msg, *args, append=append, **kwargs)
 
 
 # Todo: Add Performance Testing (logging?)
