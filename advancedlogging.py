@@ -425,26 +425,52 @@ class AdvancedLogger(dynamicwrapper.DynamicWrapper):
 
 
 class WarningsLogger(AdvancedLogger):
+    """An AdvancedLogger which specifically captures the warnings from the 'warnings' module.
+
+    This class interfaces with the 'warnings' module to handle warnings by replacing the 'showwarning' handling
+    function. This is the only handling function this class is interfacing with so the methods are class methods because
+    any modification to the 'showwarning' will be global and the instance's of this class all need to know the changes.
+    Also, this class allows the 'showwarning' be easily reassigned so the exact handling warnings can be tailored to
+    the application. The 'showwarning' function has boilerplate which does not change much between applications. To help
+    with this, there is a 'showwarning' factory which creates 'showwarning' functions with the boilerplate imbedded and
+    only needs a 'warning_handler' function passed to it.
+
+    Class Attributes:
+        _warnings_showwarning: The original warnings.showwarning function that this class overrides to capture warnings.
+        capturing (bool): A state which indicates if the class is capturing warnings.
+        default_logger_name (str): The default name of the default logger to send the warnings.
+        current_showwarning: The function that will replace warnings.showwarning while capturing warnings.
+        warning_handler: The function that will handle how a warning is logged.
+
+    Args:
+        obj: The logger that this object will wrap or the name of the logger to create.
+        module_of_class (str, optional): The name of module the class originates from.
+        capture (bool, optional): Determines if warning capturing should start on initialization.
+        default (bool, optional): Determines if the warning capturing should be set to the default functions.
+        init (bool, optional): Determines if this object should be initialized.
+    """
     _warnings_showwarning = None
-    _current_showwarning = None
     capturing = False
-    logger_name = "py.warnings"
+    default_logger_name = "py.warnings"
+    current_showwarning = None
     warning_handler = None
 
     # Class Methods
     @classmethod
-    def capture_warnings(cls, capture=True):
+    def capture_warnings(cls, capture=True, init=False):
         """Determines if warnings will be redirected to the logging package.
 
         The redirect is a global effect and logs to specifically to the 'py.warnings' logger.
 
         Args:
             capture (bool, optional): Determines if warnings will be redirected to the logging package.
+            init (bool, optional): Determines if the default logging warning handling will be used.
         """
         if capture:
             if cls._warnings_showwarning is None:
                 cls._warnings_showwarning = warnings.showwarning
-                cls.set_showwarning()
+                if init:
+                    cls.set_showwarning()
                 cls.capturing = True
         else:
             if cls._warnings_showwarning is not None:
@@ -453,11 +479,28 @@ class WarningsLogger(AdvancedLogger):
 
     # Create
     @classmethod
-    def create_warning_handler(cls, name=None):
+    def default_warning_handler(cls, name=None):
+        """Creates the default warning handler function for handling warnings to log.
+
+        Args:
+            name (str, optional): The name of the logger which the warnings will be logged to.
+
+        Returns:
+            func: The warning handler function
+        """
         if name is None:
-            name = cls.logger_name
+            name = cls.default_logger_name
 
         def warning_handler(message, category, filename, lineno, line):
+            """A function that handles a warning to be logged.
+
+            Args:
+                message: The warning message.
+                category: The warning category.
+                filename: The filename to output the warning to.
+                lineno: The line number of the warning.
+                line: The code of line of the warning.
+            """
             s = warnings.formatwarning(message, category, filename, lineno, line)
             logger = logging.getLogger(name)
             if not logger.handlers:
@@ -467,7 +510,15 @@ class WarningsLogger(AdvancedLogger):
         return warning_handler
 
     @classmethod
-    def create_showwarning(cls, warning_handler=None):
+    def default_showwarning(cls, warning_handler=None):
+        """Creates the default showwarning function to be used to capture the warnings from the warnings module
+
+        Args:
+            warning_handler: The function which will handle the captured warning.
+
+        Returns:
+            func: The showwarning function
+        """
         # Check if original warnings.showwarning function is saved.
         if cls._warnings_showwarning is None:
             raise NotImplementedError("capture warnings must be enabled before creating showwarning")
@@ -479,6 +530,15 @@ class WarningsLogger(AdvancedLogger):
 
         # Create showwarning
         def showwarning(message, category, filename, lineno, file=None, line=None):
+            """Normally, writes a warning to a file, but now sends to a warning handler.
+
+            Args:
+                message: The warning message.
+                category: The warning category.
+                filename: The filename to output the warning to.
+                lineno: The line number of the warning.
+                line: The code of line of the warning.
+            """
             if file is not None:
                 _warnings_showwarning(message, category, filename, lineno, file, line)
             else:
@@ -489,8 +549,13 @@ class WarningsLogger(AdvancedLogger):
     # Setter/Getters
     @classmethod
     def set_warning_handler(cls, warning_handler=None):
+        """Sets the warning handler to the given func or the default warning handler if there is none.
+
+        Args:
+            warning_handler: The function to set the warning handler to.
+        """
         if warning_handler is None:
-            warning_handler = cls.create_warning_handler()
+            warning_handler = cls.default_warning_handler()
 
         # Set cls.warning_handler to the new showwarning
         if cls.warning_handler is not None:
@@ -499,46 +564,93 @@ class WarningsLogger(AdvancedLogger):
 
     @classmethod
     def set_showwarning(cls, showwarning=None, warning_handler=None):
+        """Sets the showwarning function to the given func or the default showwarning function if there is none.
+
+        Args:
+            showwarning: The function to set the showwarning function to.
+            warning_handler: The function to set the warning handler to if a default showwarning function must be create
+        """
         # Creates showwarning if showwarning is not given
         if showwarning is None:
             if warning_handler is None:
                 cls.set_warning_handler(warning_handler)
-            showwarning = cls.create_showwarning(warning_handler)
+            showwarning = cls.default_showwarning(warning_handler)
 
         # Set cls._current_showwarning to the new showwarning
-        if cls._current_showwarning is not None:
-            del cls._current_showwarning
-        cls._current_showwarning = showwarning
+        if cls.current_showwarning is not None:
+            del cls.current_showwarning
+        cls.current_showwarning = showwarning
 
         # Sets warnings.showwarning
         warnings.showwarning = showwarning
 
-    @classmethod
-    def set_logger_name(cls, name):
-        cls.logger_name = name
-        if cls.capturing:
-            if cls._current_showwarning is not None:
-                del cls._current_showwarning
-            cls._current_showwarning = cls.create_showwarning(name)
-            warnings.showwarning = cls._current_showwarning
-
-    def __init__(self, obj=None, module_of_class="(Not Given)", capture=False, init=True):
+    # Construction/Destruction
+    def __init__(self, obj=None, module_of_class="(Not Given)", capture=False, default=False, init=True):
         super().__init__(init=False)
 
         if init:
-            self.construct(obj, module_of_class, capture)
+            self.construct(obj, module_of_class, capture, default)
 
-    def construct(self, obj=None, module_of_class="(Not Given)", capture=False):
+    def construct(self, obj=None, module_of_class="(Not Given)", capture=False, default=False):
+        """The constructor for this object.
+
+        Args:
+            obj: The logger that this object will wrap or the name of the logger to create.
+            module_of_class (str, optional): The name of module the class originates from.
+            capture (bool, optional): Determines if warning capturing should start on initialization.
+            default (bool, optional): Determines if the warning capturing should be set to the default functions.
+        """
         super().construct(obj, module_of_class)
         if capture:
-            self.capture_warnings()
+            self.capture_warnings(init=default)
 
-    def create_warning_handler(self, name=None):
+    # Methods
+    def create_warning_handler(self):
+        """Creates a warning handler function which uses this instance as the logger to handle the warning.
+
+        Returns:
+            func: The warning handler function
+        """
         def warning_handler(message, category, filename, lineno, line):
+            """A function that handles a warning to be logged.
+
+            Args:
+                message: The warning message.
+                category: The warning category.
+                filename: The filename to output the warning to.
+                lineno: The line number of the warning.
+                line: The code of line of the warning.
+            """
             s = warnings.formatwarning(message, category, filename, lineno, line)
             self.warning("%s", s)
 
         return warning_handler
+
+    def create_showwarning(self, warning_handler=None):
+        """Creates a showwarning function to be used to capture the warnings from the warnings module.
+
+        Args:
+            warning_handler: The function which will handle the captured warning.
+
+        Returns:
+            func: The showwarning function
+        """
+        return self.default_showwarning(warning_handler)
+
+    # Setters/Getters
+    def set_warning_logger(self, warning_handler=None, showwarning=None):
+        """Sets the warning capturing with this instance's methods if nothing is given.
+
+        Args:
+            warning_handler: The function to set the warning handler to if a default showwarning function must be create
+            showwarning: The function to set the showwarning function to.
+        """
+        if showwarning is None:
+            if warning_handler is None:
+                warning_handler = self.create_warning_handler()
+                self.set_warning_handler(warning_handler)
+            self.create_showwarning(warning_handler)
+        self.set_showwarning(showwarning)
 
 
 # Todo: Add Performance Testing (logging?)
@@ -724,7 +836,8 @@ def _rebuild_handlers(handlers):
 if __name__ == "__main__":
     # WarningLogger Example
     warning_logger = WarningsLogger("example_warning", capture=True)
-    warning_logger.add_default_file_handler("example_waring")
+    warning_logger.set_warning_logger()
+    warning_logger.add_default_file_handler("example_warning.log")
 
     warnings.warn("This is a Test")
 
