@@ -24,9 +24,9 @@ import time
 import warnings
 
 # Downloaded Libraries #
+import dynamicwrapper
 
 # Local Libraries #
-import ultility.dynamicwrapper as dynamicwrapper
 
 
 # Definitions #

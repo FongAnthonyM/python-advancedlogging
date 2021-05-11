@@ -21,9 +21,17 @@ sdist/
 var/
 wheels/
 *.egg-info/
-.installed.cfg
 *.egg
+.installed.cfg
 MANIFEST
+*.egg-info
+bin
+sdist
+wheelhouse
+develop-eggs
+venv*/
+pyvenv*/
+pip-wheel-metadata/
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
@@ -39,6 +47,7 @@ pip-delete-this-directory.txt
 htmlcov/
 .tox/
 .coverage
+../.tox
 .coverage.*
 .cache
 nosetests.xml
@@ -46,6 +55,10 @@ coverage.xml
 *.cover
 .hypothesis/
 .pytest_cache/
+htmlcov
+
+# Buildout
+.mr.developer.cfg
 
 # Translations
 *.mo
@@ -101,8 +114,31 @@ venv.bak/
 # mkdocs documentation
 /site
 
+# IDE project files
+.project
+.pydevproject
+.vscode
+*.iml
+*.komodoproject
+
+# Complexity
+output/*.html
+output/*/index.html
+
+# Sphinx
+../docs/_build
+
+.DS_Store
+*~
+.*.sw[po]
+.build
+.ve
+.pytest
+.benchmarks
+.bootstrap
+.appveyor.token
+*.bak
+
 # mypy
 .mypy_cache/
 
-# Mac OS
-.DS_Store
