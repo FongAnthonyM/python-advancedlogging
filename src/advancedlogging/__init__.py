@@ -17,4 +17,4 @@ __status__ = "Beta"
 # Downloaded Libraries #
 
 # Local Libraries #
-from advancedlogging import *
+from .advancedlogging import *
