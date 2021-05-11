@@ -74,9 +74,7 @@ setup(
         'dynamicwrapper>=1.0.0',
     ],
     extras_require={
-        # eg:
-        #   'rst': ['docutils>=0.11'],
-        #   ':python_version=="2.6"': ['argparse'],
+        "dev": ['pytest>=6.2.3'],
     },
     entry_points={
         'console_scripts': [
