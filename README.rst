@@ -53,7 +53,7 @@ Overview
 
 .. |commits-since| image:: https://img.shields.io/github/commits-since/fonganthonym/python-advancedlogging/v1.0.0.svg
     :alt: Commits since latest release
-    :target: https://github.com/fonganthonym/python-advancedlogging/compare/v1.0.0...main
+    :target: https://github.com/fonganthonym/python-advancedlogging/compare/v0.1.1...main
 
 
 
