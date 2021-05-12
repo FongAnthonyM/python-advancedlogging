@@ -304,7 +304,7 @@ class AdvancedLogger(dynamicwrapper.DynamicWrapper):
         """Creates a log entry based on provided level.
 
         Args:
-            level (str or int, optional): The level to create log entry for.
+            level (str or int): The level to create log entry for.
             msg (str): The message to add to the log.
             *args: The arguments for the original log method.
             append (bool, optional): Determines if append message should be added. Defaults to attribute if left None.
@@ -403,7 +403,7 @@ class AdvancedLogger(dynamicwrapper.DynamicWrapper):
             self._logger.exception(msg, *args, **kwargs)
 
     # New Logger Methods
-    def trace_log(self, class_, func, msg, *args, name="", level="DEBUG", append=None, **kwargs):
+    def trace_log(self, class_, func, msg, *args, name="", level=None, append=None, **kwargs):
         """The creates a log with traceback formatting.
 
         Args:
@@ -416,7 +416,9 @@ class AdvancedLogger(dynamicwrapper.DynamicWrapper):
             append (bool, optional): Determines if append message should be added. Defaults to attribute if left None.
             **kwargs: The key word arguments for the original log method.
         """
-        if isinstance(level, str):
+        if level is None:
+            level = self.level
+        elif isinstance(level, str):
             level = self.levels[level]
 
         if not self.quick_check and level >= self.level:
@@ -735,6 +737,7 @@ class ObjectWithLogging(abc.ABC):
 
     Attributes:
         loggers (dict): A collection of loggers used by this object. The keys are the names of the different loggers.
+        name (str): The name of this object.
     """
     class_loggers = {}
 
@@ -747,6 +750,7 @@ class ObjectWithLogging(abc.ABC):
     # Construction/Destruction
     def __init__(self):
         self.loggers = self.class_loggers.copy()
+        self.name = ""
 
     # Methods
     # Logging
@@ -768,7 +772,7 @@ class ObjectWithLogging(abc.ABC):
         self.loggers.update(loggers)
         return self.loggers
 
-    def trace_log(self, logger, func, msg, *args, name="", level="DEBUG", append=None, **kwargs):
+    def trace_log(self, logger, func, msg, *args, name=None, level="DEBUG", append=None, **kwargs):
         """Creates a trace log for a given logger.
 
         Args:
@@ -781,6 +785,8 @@ class ObjectWithLogging(abc.ABC):
             append (bool, optional): Determines if append message should be added. Defaults to attribute if left None.
             **kwargs: The key word arguments for the original log method.
         """
+        if name is None:
+            name = self.name
         self.loggers[logger].trace_log(type(self), func, msg, *args, name=name, level=level, append=append, **kwargs)
 
 

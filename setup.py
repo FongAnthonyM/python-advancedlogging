@@ -23,7 +23,7 @@ def read(*names, **kwargs):
 
 setup(
     name='advancedlogging',
-    version='0.1.0',
+    version='0.1.1',
     license='MIT',
     description="Builds futher on python's logging by adding loggers for classes.",
     long_description='%s\n%s' % (

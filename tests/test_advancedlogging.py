@@ -82,6 +82,22 @@ class TestAdvancedLogger(BaseAdvancedLoggerTest):
     class_ = advancedlogging.AdvancedLogger
     logger_name = "full"
 
+    @pytest.mark.parametrize("level", ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"])
+    def test_trace_log(self, get_default_file_handler, logger, tmp_dir, level):
+        log_class_ = self.class_
+        log_func = "test_trace_log"
+        log_str = "Test traceback"
+        logger.setLevel(level)
+
+        logger.trace_log(log_class_, log_func, log_str)
+
+        lines = self.get_log_lines(tmp_dir)
+        count = len(lines)
+        assert count == 1
+        assert log_func in lines[0]
+        assert level in lines[0]
+        assert log_str in lines[0]
+
 
 class TestWarningLogger(BaseAdvancedLoggerTest):
     """Tests the WarningLogger"""
