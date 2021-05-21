@@ -16,20 +16,21 @@ __status__ = "Beta"
 import copy
 import logging
 import logging.config
-import logging.handlers
 import statistics
 import time
 import warnings
 
 # Downloaded Libraries #
-import dynamicwrapper
+from baseobjects import StaticWrapper
 
 # Local Libraries #
+from .formatters import PreciseFormatter
+from .handlers import pickle_safe_handlers, unpickle_safe_handlers
 
 
 # Definitions #
 # Classes #
-class AdvancedLogger(dynamicwrapper.DynamicWrapper):
+class AdvancedLogger(StaticWrapper):
     """A logger with expanded functionality that wraps a normal logger.
 
     Class Attributes:
@@ -58,7 +59,8 @@ class AdvancedLogger(dynamicwrapper.DynamicWrapper):
         module_of_class (str, optional): The name of module the class originates from.
         init (bool, optional): Determines if this object should be initialized.
     """
-    _attributes_as_parents = ["_logger"]
+    _wrapped_types = [logging.getLogger()]
+    _wrap_attributes = ["_logger"]
     default_levels = {"DEBUG": logging.DEBUG,
                       "INFO": logging.INFO,
                       "WARNING": logging.WARNING,
@@ -99,12 +101,12 @@ class AdvancedLogger(dynamicwrapper.DynamicWrapper):
     @property
     def name_parent(self):
         """str: The names encapsulating parents of this logger."""
-        return self.name.rsplit('.', 1)[0]
+        return self._logger.name.rsplit('.', 1)[0]
 
     @property
     def name_stem(self):
         """str: The names encapsulating parents of this logger."""
-        return self.name.rsplit('.', 1)[-1]
+        return self._logger.name.rsplit('.', 1)[-1]
 
     # Pickling
     def __getstate__(self):
@@ -113,18 +115,9 @@ class AdvancedLogger(dynamicwrapper.DynamicWrapper):
         Returns:
             dict: A dictionary of this object's attributes.
         """
-        out_dict = self.__dict__.copy()
-        out_dict["disabled"] = self.disabled
-        out_dict["level"] = self.getEffectiveLevel()
-        out_dict["propagate"] = self.propagate
-        out_dict["filters"] = copy.deepcopy(self.filters)
-        out_dict["handlers"] = []
-        for handler in self.handlers:
-            lock = handler.__dict__.pop("lock")
-            stream = handler.__dict__.pop("stream")
-            out_dict["handlers"].append(copy.deepcopy(handler))
-            handler.__dict__["lock"] = lock
-            handler.__dict__["stream"] = stream
+        out_dict = copy.deepcopy(self.__dict__)
+        out_dict["handlers"] = pickle_safe_handlers(self._logger.handlers)
+        del out_dict["_logger"].handlers
         return out_dict
 
     def __setstate__(self, in_dict):
@@ -133,11 +126,7 @@ class AdvancedLogger(dynamicwrapper.DynamicWrapper):
         Args:
             in_dict (dict): The attributes to build this object from.
         """
-        in_dict["_logger"].disabled = in_dict.pop("disabled")
-        in_dict["_logger"].setLevel(in_dict.pop("level"))
-        in_dict["_logger"].propagate = in_dict.pop("propagate")
-        in_dict["_logger"].filters = in_dict.pop("filters")
-        in_dict["_logger"].handlers = _rebuild_handlers(in_dict.pop("handlers"))
+        in_dict["_logger"].handlers = unpickle_safe_handlers(in_dict.pop("handlers"))
         self.__dict__ = in_dict
 
     # Methods
@@ -197,11 +186,11 @@ class AdvancedLogger(dynamicwrapper.DynamicWrapper):
         Returns:
             logger: The logger which the attributes were copied to.
         """
-        logger.propagate = self.propagate
-        logger.setLevel(self.getEffectiveLevel())
-        for filter_ in self.filters:
+        logger.propagate = self._logger.propagate
+        logger.setLevel(self._logger.getEffectiveLevel())
+        for filter_ in self._logger.filters:
             logger.addFilter(filter_)
-        for handler in self.handlers:
+        for handler in self._logger.handlers:
             logger.addHandler(handler)
         return logger
 
@@ -246,7 +235,7 @@ class AdvancedLogger(dynamicwrapper.DynamicWrapper):
         handler.setLevel(level)
         formatter = PreciseFormatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
         handler.setFormatter(formatter)
-        self.addHandler(handler)
+        self._logger.addHandler(handler)
 
     def add_default_file_handler(self, filename, mode='a', encoding=None, delay=False, level="DEBUG"):
         """Adds a file handler with Debug level output and a formatter that millisecond precise time.
@@ -264,7 +253,7 @@ class AdvancedLogger(dynamicwrapper.DynamicWrapper):
         handler.setLevel(level)
         formatter = PreciseFormatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
         handler.setFormatter(formatter)
-        self.addHandler(handler)
+        self._logger.addHandler(handler)
 
     # Override Logger Methods
     def log(self, level, msg, *args, append=None, **kwargs):
@@ -280,7 +269,7 @@ class AdvancedLogger(dynamicwrapper.DynamicWrapper):
         if isinstance(level, str):
             level = self.levels[level]
 
-        if not self.quick_check and level >= self.level:
+        if not self.quick_check and level >= self._logger.level:
             if append or (append is None and self.allow_append):
                 msg = self.append_message + msg
             self._logger.log(level, msg, *args, **kwargs)
@@ -294,7 +283,7 @@ class AdvancedLogger(dynamicwrapper.DynamicWrapper):
             append (bool, optional): Determines if append message should be added. Defaults to attribute if left None.
             **kwargs: The key word arguments for the original log method.
         """
-        if not self.quick_check and self.levels["DEBUG"] >= self.level:
+        if not self.quick_check and self.levels["DEBUG"] >= self._logger.level:
             if append or (append is None and self.allow_append):
                 msg = self.append_message + msg
             self._logger.debug(msg, *args, **kwargs)
@@ -308,7 +297,7 @@ class AdvancedLogger(dynamicwrapper.DynamicWrapper):
             append (bool, optional): Determines if append message should be added. Defaults to attribute if left None.
             **kwargs: The key word arguments for the original log method.
         """
-        if not self.quick_check and self.levels["INFO"] >= self.level:
+        if not self.quick_check and self.levels["INFO"] >= self._logger.level:
             if append or (append is None and self.allow_append):
                 msg = self.append_message + msg
             self._logger.info(msg, *args, **kwargs)
@@ -322,7 +311,7 @@ class AdvancedLogger(dynamicwrapper.DynamicWrapper):
             append (bool, optional): Determines if append message should be added. Defaults to attribute if left None.
             **kwargs: The key word arguments for the original log method.
         """
-        if not self.quick_check and self.levels["WARNING"] >= self.level:
+        if not self.quick_check and self.levels["WARNING"] >= self._logger.level:
             if append or (append is None and self.allow_append):
                 msg = self.append_message + msg
             self._logger.warning(msg, *args, **kwargs)
@@ -336,7 +325,7 @@ class AdvancedLogger(dynamicwrapper.DynamicWrapper):
             append (bool, optional): Determines if append message should be added. Defaults to attribute if left None.
             **kwargs: The key word arguments for the original log method.
         """
-        if not self.quick_check and self.levels["ERROR"] >= self.level:
+        if not self.quick_check and self.levels["ERROR"] >= self._logger.level:
             if append or (append is None and self.allow_append):
                 msg = self.append_message + msg
             self._logger.error(msg, *args, **kwargs)
@@ -350,7 +339,7 @@ class AdvancedLogger(dynamicwrapper.DynamicWrapper):
             append (bool, optional): Determines if append message should be added. Defaults to attribute if left None.
             **kwargs: The key word arguments for the original log method.
         """
-        if not self.quick_check and self.levels["CRITICAL"] >= self.level:
+        if not self.quick_check and self.levels["CRITICAL"] >= self._logger.level:
             if append or (append is None and self.allow_append):
                 msg = self.append_message + msg
             self._logger.critical(msg, *args, **kwargs)
@@ -364,7 +353,7 @@ class AdvancedLogger(dynamicwrapper.DynamicWrapper):
             append (bool, optional): Determines if append message should be added. Defaults to attribute if left None.
             **kwargs: The key word arguments for the original log method.
         """
-        if not self.quick_check and self.levels["EXCEPTION"] >= self.level:
+        if not self.quick_check and self.levels["EXCEPTION"] >= self._logger.level:
             if append or (append is None and self.allow_append):
                 msg = self.append_message + msg
             self._logger.exception(msg, *args, **kwargs)
@@ -384,11 +373,11 @@ class AdvancedLogger(dynamicwrapper.DynamicWrapper):
             **kwargs: The key word arguments for the original log method.
         """
         if level is None:
-            level = self.level
+            level = self._logger.level
         elif isinstance(level, str):
             level = self.levels[level]
 
-        if not self.quick_check and level >= self.level:
+        if not self.quick_check and level >= self._logger.level:
             trace_msg = f"{class_}({name}) -> {func}: {msg}"
             self.log(level, trace_msg, *args, append=append, **kwargs)
 
@@ -401,7 +390,7 @@ class WarningsLogger(AdvancedLogger):
     any modification to the 'showwarning' will be global and the instance's of this class all need to know the changes.
     Also, this class allows the 'showwarning' be easily reassigned so the exact handling warnings can be tailored to
     the application. The 'showwarning' function has boilerplate which does not change much between applications. To help
-    with this, there is a 'showwarning' factory which creates 'showwarning' functions with the boilerplate imbedded and
+    with this, there is a 'showwarning' factory which creates 'showwarning' functions with the boilerplate embedded and
     only needs a 'warning_handler' function passed to it.
 
     Class Attributes:
@@ -687,52 +676,4 @@ class PerformanceLogger(AdvancedLogger):
         mean, std = self.pair_average_difference(type_)
         msg = f"{type_} had a difference of {mean} ± {std}."
         self.log(level, msg, *args, append=append, **kwargs)
-
-# Functions #
-def _rebuild_handlers(handlers):
-    """Creates new handlers from a list of handlers."""
-    new_handlers = []
-    for handler in handlers:
-        if isinstance(handler, logging.handlers.QueueHandler):
-            kwargs = {"queue", handler.queue}
-
-        elif isinstance(handler, logging.handlers.BufferingHandler):
-            kwargs = {"capacity": handlers.capacity}
-
-        elif isinstance(handler, logging.handlers.HTTPHandler):
-            kwargs = {"host": handler.host, "url": handler.url, "method": handler.method, "secure": handler.secure,
-                      "credentials": handler.credentials, "context": handler.context}
-
-        elif isinstance(handler, logging.handlers.NTEventLogHandler):
-            kwargs = {"appname": handler.appname, "dllname": handler.dllname, "logtype": handler.logtype}
-
-        elif isinstance(handler, logging.handlers.SMTPHandler):
-            kwargs = {"mailhost": handler.mailhost, "fromaddr": handler.fromaddr, "toaddrs": handler.toaddrs,
-                      "subject": handler.subject, "credentials": handler.credentials, "secure": handler.secure,
-                      "timeout": handler.timeout}
-
-        elif isinstance(handler, logging.handlers.SysLogHandler):
-            kwargs = {"address": handler.address, "facility": handler.facility, "socktype": handler.socktype}
-
-        elif isinstance(handler, logging.handlers.SocketHandler):
-            kwargs = {"host": handler.host, "port": handler.port}
-
-        elif isinstance(handler, logging.FileHandler):
-            kwargs = {"filename": handler.baseFilename, "mode": handler.mode,
-                      "encoding": handler.encoding, "delay": handler.delay}
-
-        elif isinstance(handler, logging.StreamHandler):
-            kwargs = {}
-            warnings.warn("StreamHandler stream cannot be pickled, using default stream (Hint: Define StreamHandler in Process)")
-
-        else:
-            warnings.warn()
-            continue
-
-        new_handler = type(handler)(**kwargs)
-        new_handler.__dict__.update(handler.__dict__)
-        new_handlers.append(new_handler)
-
-    return new_handlers
-
 

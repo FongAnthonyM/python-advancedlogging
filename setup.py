@@ -71,7 +71,7 @@ setup(
     ],
     python_requires='>=3.6',
     install_requires=[
-        'dynamicwrapper>=1.0.0',
+        'baseobjects>=1.1.1',
     ],
     extras_require={
         "dev": ['pytest>=6.2.3'],

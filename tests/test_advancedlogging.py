@@ -14,6 +14,7 @@ __status__ = "Beta"
 
 # Default Libraries #
 import pathlib
+import pickle
 import warnings
 
 # Downloaded Libraries #
@@ -36,8 +37,8 @@ class ClassTest:
     """Default class tests that all classes should pass."""
     class_ = None
 
-    def test_instant_creation(self):
-        assert isinstance(self.class_(), self.class_)
+    # def test_instant_creation(self):
+    #     assert isinstance(self.class_(), self.class_)
 
 
 class BaseAdvancedLoggerTest(ClassTest):
@@ -51,9 +52,17 @@ class BaseAdvancedLoggerTest(ClassTest):
             lines = f_object.readlines()
         return lines
 
-    @pytest.fixture
-    def logger(self):
+    def normal_logger(self):
         return self.class_(self.logger_name)
+
+    def pickle_logger(self):
+        obj = self.normal_logger()
+        pickle_jar = pickle.dumps(obj)
+        return pickle.loads(pickle_jar)
+
+    @pytest.fixture(params=[normal_logger, pickle_logger])
+    def logger(self, request):
+        return request.param(self)
 
     @pytest.fixture
     def get_default_file_handler(self, logger, tmp_dir):
@@ -61,8 +70,14 @@ class BaseAdvancedLoggerTest(ClassTest):
         logger.add_default_file_handler(filename=path)
         return logger
 
-    def test_instantiation(self, logger):
-        assert logger.name == self.logger_name
+    def test_instantiation(self):
+        assert self.normal_logger().name == self.logger_name
+
+    def test_pickle(self):
+        obj = self.normal_logger()
+        pickle_jar = pickle.dumps(obj)
+        new_obj = pickle.loads(pickle_jar)
+        assert set(dir(new_obj)) == set(dir(obj))
 
     def test_default_file_handler(self, get_default_file_handler, logger):
         assert len(logger.handlers) > 0
@@ -127,3 +142,7 @@ class TestPerformanceLogger(BaseAdvancedLoggerTest):
     class_ = advancedlogging.PerformanceLogger
     logger_name = "performance"
 
+
+# Main #
+if __name__ == '__main__':
+    pytest.main(["-v", "-s"])
