@@ -17,13 +17,14 @@ import abc
 import copy
 
 # Downloaded Libraries #
+from baseobjects import BaseObject
 
 # Local Libraries #
 
 
 # Definitions #
 # Classes #
-class ObjectWithLogging(abc.ABC):
+class ObjectWithLogging(BaseObject):
     """Class that has inbuilt logging as an option.
 
     Loggers can be defined on the class level or object level and be shared to other namespaces. Class loggers can be
@@ -52,32 +53,6 @@ class ObjectWithLogging(abc.ABC):
     def __init__(self):
         self.loggers = self.class_loggers.copy()
         self.name = ""
-
-    def __copy__(self):
-        """The copy magic method (shallow)
-
-        Returns:
-            :obj:`ObjectWithLogging`: A shallow copy of this object.
-        """
-        new = type(self)()
-        new.__dict__.update(self.__dict__)
-        return new
-
-    def __deepcopy__(self, memo={}):
-        """Overrides the deep copy magic method to ensure the dynamically inheriting objects are copied.
-
-        Args:
-            memo (dict): A dictionary of user defined information to pass to another deepcopy call which it will handle.
-
-        Returns:
-            :obj:`ObjectWithLogging`: A deep copy of this object.
-        """
-        new_dict = {}
-        new = type(self)()
-        for k, i in self.__dict__.items():
-            new_dict[k] = copy.deepcopy(i)
-        new.__dict__.update(self.__dict__)
-        return new
 
     # Methods
     # Logging

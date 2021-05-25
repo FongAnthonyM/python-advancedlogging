@@ -7,7 +7,7 @@ __author__ = "Anthony Fong"
 __copyright__ = "Copyright 2021, Anthony Fong"
 __credits__ = ["Anthony Fong"]
 __license__ = ""
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 __maintainer__ = "Anthony Fong"
 __email__ = ""
 __status__ = "Beta"
@@ -17,9 +17,9 @@ __status__ = "Beta"
 # Downloaded Libraries #
 
 # Local Libraries #
-from .advancedloggers import *
-from .formatters import *
-from .objectswithlogging import *
+from .advancedloggers import AdvancedLogger, WarningsLogger, PerformanceLogger
+from .formatters import PreciseFormatter
+from .objectswithlogging import ObjectWithLogging
 
 # Main #
 if __name__ == "__main__":

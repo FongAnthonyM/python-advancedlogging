@@ -27,7 +27,6 @@ from baseobjects import StaticWrapper
 from .formatters import PreciseFormatter
 from .handlers import pickle_safe_handlers, unpickle_safe_handlers
 
-
 # Definitions #
 # Classes #
 class AdvancedLogger(StaticWrapper):
@@ -144,6 +143,24 @@ class AdvancedLogger(StaticWrapper):
         else:
             self._logger = logging.getLogger(obj)
 
+    # State
+    def isEnabledFor(self, level):
+        """Checks if a supplied level is enabled for this logger.
+
+        Args:
+            level: The level to check if it is enabled for this logger.
+
+        Returns:
+            bool: If the level is endabled for this logger.
+        """
+        if self._logger.disabled:
+            return False
+
+        if isinstance(level, str):
+            return self.levels[level] >= self._logger.level
+        else:
+            return level >= self._logger.level
+
     # Levels Methods
     def get_level(self, name):
         """Gets the level value based on the name within the levels dictionary.
@@ -154,7 +171,10 @@ class AdvancedLogger(StaticWrapper):
         Returns:
             int: The numerical value of the level.
         """
-        return self.levels[name]
+        if isinstance(name, str):
+            return self.levels[name]
+        else:
+            return name
 
     # Base Logger Editing
     def set_base_logger(self, logger):
@@ -269,7 +289,7 @@ class AdvancedLogger(StaticWrapper):
         if isinstance(level, str):
             level = self.levels[level]
 
-        if not self.quick_check and level >= self._logger.level:
+        if not self.quick_check or self.isEnabledFor(level):
             if append or (append is None and self.allow_append):
                 msg = self.append_message + msg
             self._logger.log(level, msg, *args, **kwargs)
@@ -283,7 +303,7 @@ class AdvancedLogger(StaticWrapper):
             append (bool, optional): Determines if append message should be added. Defaults to attribute if left None.
             **kwargs: The key word arguments for the original log method.
         """
-        if not self.quick_check and self.levels["DEBUG"] >= self._logger.level:
+        if not self.quick_check or self.isEnabledFor(self.levels["DEBUG"]):
             if append or (append is None and self.allow_append):
                 msg = self.append_message + msg
             self._logger.debug(msg, *args, **kwargs)
@@ -297,7 +317,7 @@ class AdvancedLogger(StaticWrapper):
             append (bool, optional): Determines if append message should be added. Defaults to attribute if left None.
             **kwargs: The key word arguments for the original log method.
         """
-        if not self.quick_check and self.levels["INFO"] >= self._logger.level:
+        if not self.quick_check or self.isEnabledFor(self.levels["INFO"]):
             if append or (append is None and self.allow_append):
                 msg = self.append_message + msg
             self._logger.info(msg, *args, **kwargs)
@@ -311,7 +331,7 @@ class AdvancedLogger(StaticWrapper):
             append (bool, optional): Determines if append message should be added. Defaults to attribute if left None.
             **kwargs: The key word arguments for the original log method.
         """
-        if not self.quick_check and self.levels["WARNING"] >= self._logger.level:
+        if not self.quick_check or self.isEnabledFor(self.levels["WARNING"]):
             if append or (append is None and self.allow_append):
                 msg = self.append_message + msg
             self._logger.warning(msg, *args, **kwargs)
@@ -325,7 +345,7 @@ class AdvancedLogger(StaticWrapper):
             append (bool, optional): Determines if append message should be added. Defaults to attribute if left None.
             **kwargs: The key word arguments for the original log method.
         """
-        if not self.quick_check and self.levels["ERROR"] >= self._logger.level:
+        if not self.quick_check or self.isEnabledFor(self.levels["ERROR"]):
             if append or (append is None and self.allow_append):
                 msg = self.append_message + msg
             self._logger.error(msg, *args, **kwargs)
@@ -339,7 +359,7 @@ class AdvancedLogger(StaticWrapper):
             append (bool, optional): Determines if append message should be added. Defaults to attribute if left None.
             **kwargs: The key word arguments for the original log method.
         """
-        if not self.quick_check and self.levels["CRITICAL"] >= self._logger.level:
+        if not self.quick_check or self.isEnabledFor(self.levels["CRITICAL"]):
             if append or (append is None and self.allow_append):
                 msg = self.append_message + msg
             self._logger.critical(msg, *args, **kwargs)
@@ -353,7 +373,7 @@ class AdvancedLogger(StaticWrapper):
             append (bool, optional): Determines if append message should be added. Defaults to attribute if left None.
             **kwargs: The key word arguments for the original log method.
         """
-        if not self.quick_check and self.levels["EXCEPTION"] >= self._logger.level:
+        if not self.quick_check or self.isEnabledFor(self.levels["EXCEPTION"]):
             if append or (append is None and self.allow_append):
                 msg = self.append_message + msg
             self._logger.exception(msg, *args, **kwargs)
@@ -377,7 +397,7 @@ class AdvancedLogger(StaticWrapper):
         elif isinstance(level, str):
             level = self.levels[level]
 
-        if not self.quick_check and level >= self._logger.level:
+        if not self.quick_check or self.isEnabledFor(level):
             trace_msg = f"{class_}({name}) -> {func}: {msg}"
             self.log(level, trace_msg, *args, append=append, **kwargs)
 
