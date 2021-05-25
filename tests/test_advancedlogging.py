@@ -15,6 +15,7 @@ __status__ = "Beta"
 # Default Libraries #
 import pathlib
 import pickle
+import timeit
 import warnings
 
 # Downloaded Libraries #
@@ -36,6 +37,8 @@ def tmp_dir(tmpdir):
 class ClassTest:
     """Default class tests that all classes should pass."""
     class_ = None
+    timeit_runs = 100000
+    speed_tolerance = 200
 
     # def test_instant_creation(self):
     #     assert isinstance(self.class_(), self.class_)
@@ -112,6 +115,26 @@ class TestAdvancedLogger(BaseAdvancedLoggerTest):
         assert log_func in lines[0]
         assert level in lines[0]
         assert log_str in lines[0]
+
+    @pytest.mark.parametrize("level", ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"])
+    def test_log_speed(self, get_default_file_handler, logger, tmp_dir, level):
+        log_class_ = self.class_
+        log_func = "test_trace_log"
+        log_str = "Test traceback"
+        logger.setLevel(level)
+
+        def log():
+            logger.trace_log(log_class_, log_func, log_str)
+
+        def assignment():
+            x = 10
+
+        mean_new = timeit.timeit(log, number=self.timeit_runs) / self.timeit_runs * 1000000
+        mean_old = timeit.timeit(assignment, number=self.timeit_runs) / self.timeit_runs * 1000000
+        percent = (mean_new / mean_old) * 100
+
+        print(f"\nNew speed {mean_new:.3f} μs took {percent:.3f}% of the time of the old function.")
+        assert percent < self.speed_tolerance
 
 
 class TestWarningLogger(BaseAdvancedLoggerTest):
