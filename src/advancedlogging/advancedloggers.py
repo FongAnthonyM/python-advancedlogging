@@ -27,6 +27,7 @@ from baseobjects import StaticWrapper
 from .formatters import PreciseFormatter
 from .handlers import pickle_safe_handlers, unpickle_safe_handlers
 
+
 # Definitions #
 # Classes #
 class AdvancedLogger(StaticWrapper):
@@ -271,7 +272,7 @@ class AdvancedLogger(StaticWrapper):
             level = self.get_level(level)
         handler = logging.FileHandler(filename, mode, encoding, delay)
         handler.setLevel(level)
-        formatter = PreciseFormatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        formatter = PreciseFormatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
         handler.setFormatter(formatter)
         self._logger.addHandler(handler)
 

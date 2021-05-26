@@ -13,11 +13,13 @@ __email__ = ""
 __status__ = "Beta"
 
 # Default Libraries #
+import asyncio
 import logging
 import logging.handlers
+import multiprocessing
 import pathlib
 import pickle
-import queue
+import time
 import timeit
 import warnings
 
@@ -26,6 +28,7 @@ import pytest
 
 # Local Libraries #
 import src.advancedlogging as advancedlogging
+import src.advancedlogging.handlers as handlers
 
 
 # Definitions #
@@ -36,21 +39,24 @@ def tmp_dir(tmpdir):
     return pathlib.Path(tmpdir)
 
 
+def run_method(obj, method, **kwargs):
+    return getattr(obj, method)(**kwargs)
+
+
 # Classes #
 class ClassTest:
     """Default class tests that all classes should pass."""
     class_ = None
-    timeit_runs = 1000
+    timeit_runs = 100
     speed_tolerance = 200
 
     # def test_instant_creation(self):
     #     assert isinstance(self.class_(), self.class_)
 
 
-class BaseAdvancedLoggerTest(ClassTest):
-    """All AdvancedLogger subclasses need to pass these tests to be considered functional."""
+class BuildLogger(ClassTest):
     class_ = None
-    logger_name = "base"
+    logger_name = "build"
 
     def get_log_lines(self, tmp_dir):
         path = tmp_dir.joinpath(f"{self.logger_name}.log")
@@ -66,7 +72,7 @@ class BaseAdvancedLoggerTest(ClassTest):
         pickle_jar = pickle.dumps(obj)
         return pickle.loads(pickle_jar)
 
-    @pytest.fixture(params=[normal_logger, pickle_logger])
+    @pytest.fixture(params=[normal_logger])
     def logger(self, request):
         return request.param(self)
 
@@ -75,6 +81,12 @@ class BaseAdvancedLoggerTest(ClassTest):
         path = tmp_dir.joinpath(f"{self.logger_name}.log")
         logger.add_default_file_handler(filename=path)
         return logger
+
+
+class BaseAdvancedLoggerTest(BuildLogger):
+    """All AdvancedLogger subclasses need to pass these tests to be considered functional."""
+    class_ = None
+    logger_name = "base"
 
     def test_instantiation(self):
         assert self.normal_logger().name == self.logger_name
@@ -193,7 +205,7 @@ class TestAdvancedLogger(BaseAdvancedLoggerTest):
         log_class_ = self.class_
         logger.setLevel(level)
 
-        que = queue.Queue(-1)
+        que = multiprocessing.Queue(-1)
         queue_handler = logging.handlers.QueueHandler(que)
         logger.addHandler(queue_handler)
 
@@ -243,6 +255,71 @@ class TestPerformanceLogger(BaseAdvancedLoggerTest):
     """Tests the PerformanceLogger"""
     class_ = advancedlogging.PerformanceLogger
     logger_name = "performance"
+
+
+class TestLogListener(BuildLogger):
+    class_ = advancedlogging.AdvancedLogger
+    logger_name = "listener"
+
+    def listen(self, q, tmp_dir):
+        path = tmp_dir.joinpath(f"{self.logger_name}.log")
+        file_handler = handlers.FileHandler(path)
+        formatter = advancedlogging.formatters.PreciseFormatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+        file_handler.setFormatter(formatter)
+        listener = handlers.LogListener(q, file_handler)
+        asyncio.run(listener._monitor_async())
+
+    def test_instantiation(self):
+        q = multiprocessing.Queue()
+        listener = handlers.LogListener(q)
+        assert isinstance(listener, handlers.LogListener)
+
+    @pytest.mark.xfail
+    def test_pickle(self):
+        q = multiprocessing.Queue()
+        obj = handlers.QueueHandler(q)
+        pickle_jar = pickle.dumps(obj)
+        new_obj = pickle.loads(pickle_jar)
+        assert set(dir(new_obj)) == set(dir(obj))
+
+    def test_listening(self, logger, tmp_dir):
+        # Setup
+        level = "INFO"
+        log_class_ = self.class_
+        log_func = "test_trace_log"
+        log_str = "Test traceback"
+        logger.setLevel(level)
+
+        # Create Queue and handler
+        q = multiprocessing.Queue()
+        q_handler = handlers.QueueHandler(q)
+        logger.addHandler(q_handler)
+
+        # Create listener
+        kwargs = {"obj": self, "method": "listen", "q": q, "tmp_dir": tmp_dir}
+
+        process = multiprocessing.Process(target=run_method, kwargs=kwargs)
+        process.start()
+
+        time.sleep(1)
+        assert process.is_alive()
+
+        # Log
+        logger.trace_log(log_class_, log_func, log_str, level=level)
+
+        # Shutdown process
+        time.sleep(0.5)
+        q.put_nowait(None)
+        time.sleep(1)
+        assert not process.is_alive()
+
+        # Check log file
+        lines = self.get_log_lines(tmp_dir)
+        count = len(lines)
+        assert count == 1
+        assert log_func in lines[0]
+        assert level in lines[0]
+        assert log_str in lines[0]
 
 
 # Main #
