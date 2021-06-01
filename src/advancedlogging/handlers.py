@@ -24,7 +24,7 @@ import time
 import warnings
 
 # Downloaded Libraries #
-from baseobjects import BaseObject
+from baseobjects import BaseObject, TimeoutWarning
 
 # Local Libraries #
 
@@ -97,14 +97,6 @@ def unpickle_safe_handlers(handlers):
 
 
 # Classes #
-# Warnings #
-class TimeoutWarning(Warning):
-    """A general warning for timeouts."""
-    def __init__(self, name="A function"):
-        message = f"{name} timed out"
-        super().__init__(message)
-
-
 # Handlers
 class PickableHandler(BaseObject, Handler):
     """An abstract handler that implements safe pickling for a handler."""
