@@ -124,7 +124,18 @@ class PickableHandler(BaseObject, Handler):
 
 
 class FileHandler(logging.FileHandler, PickableHandler):
-    pass
+    """A modified FileHandler class which includes safe pickling."""
+
+    # Magic Methods
+    # Pickling
+    def __getstate__(self):
+        """Creates a dictionary of attributes which can be used to rebuild this object.
+
+        Returns:
+            dict: A dictionary of this object's attributes.
+        """
+        self.close()
+        return super().__getstate__()
 
 
 class QueueHandler(logging.handlers.QueueHandler, PickableHandler):
