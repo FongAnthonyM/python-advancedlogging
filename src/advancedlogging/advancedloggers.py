@@ -117,7 +117,7 @@ class AdvancedLogger(StaticWrapper):
         """
         out_dict = copy.deepcopy(self.__dict__)
         out_dict["handlers"] = pickle_safe_handlers(self._logger.handlers)
-        del out_dict["_logger"].handlers
+        del out_dict["__logger"].handlers
         return out_dict
 
     def __setstate__(self, in_dict):
@@ -126,7 +126,7 @@ class AdvancedLogger(StaticWrapper):
         Args:
             in_dict (dict): The attributes to build this object from.
         """
-        in_dict["_logger"].handlers = unpickle_safe_handlers(in_dict.pop("handlers"))
+        in_dict["__logger"].handlers = unpickle_safe_handlers(in_dict.pop("handlers"))
         self.__dict__ = in_dict
 
     # Methods
