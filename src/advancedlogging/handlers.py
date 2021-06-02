@@ -134,8 +134,22 @@ class FileHandler(logging.FileHandler, PickableHandler):
         Returns:
             dict: A dictionary of this object's attributes.
         """
-        self.close()
-        return super().__getstate__()
+        out_dict = super().__getstate__()
+        if self.stream:
+            self.close()
+            out_dict["stream"] = True
+        return
+
+    def __setstate__(self, in_dict):
+        """Builds this object based on a dictionary of corresponding attributes.
+
+        Args:
+            in_dict (dict): The attributes to build this object from.
+        """
+        super().__setstate__(in_dict)
+        if in_dict["stream"]:
+            self.stream = self._open()
+
 
 
 class QueueHandler(logging.handlers.QueueHandler, PickableHandler):
