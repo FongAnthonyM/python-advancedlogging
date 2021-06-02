@@ -40,7 +40,7 @@ def pickle_safe_handler(handler):
     Returns:
         :obj:`Handler`: A handler that can be pickled.
     """
-    if hasattr(handler, "__getstate__"):
+    if not hasattr(handler, "__getstate__"):
         new_handler = copy.copy(handler)
         new_handler.lock = None
         if "stream" in new_handler.__dict__:
@@ -76,7 +76,7 @@ def unpickle_safe_handler(handler):
     Returns:
         :obj:`Handler`: A normal logging handler that was pickled.
     """
-    if hasattr(handler, "__setstate__"):
+    if not hasattr(handler, "__setstate__"):
         handler.createLock()
     return handler
 
