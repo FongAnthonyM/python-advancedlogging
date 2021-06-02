@@ -138,7 +138,7 @@ class FileHandler(logging.FileHandler, PickableHandler):
         if self.stream:
             self.close()
             out_dict["stream"] = True
-        return
+        return out_dict
 
     def __setstate__(self, in_dict):
         """Builds this object based on a dictionary of corresponding attributes.
@@ -149,7 +149,6 @@ class FileHandler(logging.FileHandler, PickableHandler):
         super().__setstate__(in_dict)
         if in_dict["stream"]:
             self.stream = self._open()
-
 
 
 class QueueHandler(logging.handlers.QueueHandler, PickableHandler):
