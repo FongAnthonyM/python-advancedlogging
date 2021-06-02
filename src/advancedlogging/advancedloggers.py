@@ -293,7 +293,7 @@ class AdvancedLogger(StaticWrapper):
         if not self.quick_check or self.isEnabledFor(level):
             if append or (append is None and self.allow_append):
                 msg = self.append_message + msg
-            self._logger.log(level, msg, *args, **kwargs)
+            self._logger._log(level, msg, *args, **kwargs)
 
     def debug(self, msg, *args, append=None, **kwargs):
         """Creates a debug log.
