@@ -45,7 +45,7 @@ class ObjectWithLogging(BaseObject):
 
     # Class Methods
     @classmethod
-    def build_class_loggers(cls):
+    def build_class_loggers(cls, **kwargs):
         """Setup class loggers here"""
         pass
 
@@ -56,7 +56,7 @@ class ObjectWithLogging(BaseObject):
 
     # Methods
     # Logging
-    def build_loggers(self):
+    def build_loggers(self, **kwargs):
         """Setup object loggers here"""
         pass
 

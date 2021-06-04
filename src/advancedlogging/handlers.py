@@ -109,7 +109,7 @@ class PickableHandler(BaseObject, Handler):
         Returns:
             dict: A dictionary of this object's attributes.
         """
-        out_dict = copy.copy(self.__dict__)
+        out_dict = self.__dict__.copy()
         out_dict.pop("lock")
         return out_dict
 
