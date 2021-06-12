@@ -117,7 +117,8 @@ class AdvancedLogger(StaticWrapper):
         """
         out_dict = copy.deepcopy(self.__dict__)
         out_dict["handlers"] = pickle_safe_handlers(self._logger.handlers)
-        del out_dict["__logger"].handlers
+        out_dict["logger"] = copy.deepcopy(self._logger.__dict__)
+        del out_dict["logger"].handlers, out_dict["__logger"]
         return out_dict
 
     def __setstate__(self, in_dict):
@@ -126,6 +127,8 @@ class AdvancedLogger(StaticWrapper):
         Args:
             in_dict (dict): The attributes to build this object from.
         """
+        in_dict["__logger"] = logging.getLogger()
+        in_dict["__logger"].__dict__ = in_dict.pop("logger")
         in_dict["__logger"].handlers = unpickle_safe_handlers(in_dict.pop("handlers"))
         self.__dict__ = in_dict
 
@@ -214,6 +217,16 @@ class AdvancedLogger(StaticWrapper):
         for handler in self._logger.handlers:
             logger.addHandler(handler)
         return logger
+
+    def deepcopy_base_logger(self):
+        """Creates a deep copy of the base logger.
+
+        Returns:
+            logger: The new deep copy of the logger.
+        """
+        new_logger = logging.getLogger(self._logger.name)
+        new_logger.__dict__ = copy.deepcopy(self._logger.__dict__)
+        return new_logger
 
     def getChild(self, name, **kwargs):
         """Create a child logger of this logger which will be an AdvancedLogger or one its subclasses.
