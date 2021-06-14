@@ -261,20 +261,23 @@ class TestLogListener(BuildLogger):
     class_ = advancedlogging.AdvancedLogger
     logger_name = "listener"
 
-    def listen(self, q, tmp_dir):
+    def setup_listen(self, q, tmp_dir):
         path = tmp_dir.joinpath(f"{self.logger_name}.log")
         file_handler = handlers.FileHandler(path)
         formatter = advancedlogging.formatters.PreciseFormatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
         file_handler.setFormatter(formatter)
         listener = handlers.LogListener(q, file_handler)
-        asyncio.run(listener._monitor_async())
+        listener.start()
+
+    def only_listen(self, listener):
+        listener.start()
 
     def test_instantiation(self):
         q = multiprocessing.Queue()
         listener = handlers.LogListener(q)
         assert isinstance(listener, handlers.LogListener)
 
-    @pytest.mark.xfail
+    @pytest.mark.skip
     def test_pickle(self):
         q = multiprocessing.Queue()
         obj = handlers.QueueHandler(q)
@@ -282,7 +285,7 @@ class TestLogListener(BuildLogger):
         new_obj = pickle.loads(pickle_jar)
         assert set(dir(new_obj)) == set(dir(obj))
 
-    def test_listening(self, logger, tmp_dir):
+    def test_separate_setup_listening(self, logger, tmp_dir):
         # Setup
         level = "INFO"
         log_class_ = self.class_
@@ -296,7 +299,7 @@ class TestLogListener(BuildLogger):
         logger.addHandler(q_handler)
 
         # Create listener
-        kwargs = {"obj": self, "method": "listen", "q": q, "tmp_dir": tmp_dir}
+        kwargs = {"obj": self, "method": "setup_listen", "q": q, "tmp_dir": tmp_dir}
 
         process = multiprocessing.Process(target=run_method, kwargs=kwargs)
         process.start()
@@ -321,6 +324,50 @@ class TestLogListener(BuildLogger):
         assert level in lines[0]
         assert log_str in lines[0]
 
+    def test_separate_only_listening(self, logger, tmp_dir):
+        # Setup
+        level = "INFO"
+        log_class_ = self.class_
+        log_func = "test_trace_log"
+        log_str = "Test traceback"
+        logger.setLevel(level)
+
+        # Create Queue and handler
+        q = multiprocessing.Queue()
+        q_handler = handlers.QueueHandler(q)
+        logger.addHandler(q_handler)
+
+        path = tmp_dir.joinpath(f"{self.logger_name}.log")
+        file_handler = handlers.FileHandler(path)
+        formatter = advancedlogging.formatters.PreciseFormatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+        file_handler.setFormatter(formatter)
+        listener = handlers.LogListener(q, file_handler)
+
+        # Create listener
+        kwargs = {"obj": self, "method": "only_listen", "listener": listener}
+
+        process = multiprocessing.Process(target=run_method, kwargs=kwargs)
+        process.start()
+
+        time.sleep(1)
+        assert process.is_alive()
+
+        # Log
+        logger.trace_log(log_class_, log_func, log_str, level=level)
+
+        # Shutdown process
+        time.sleep(0.5)
+        q.put_nowait(None)
+        time.sleep(1)
+        assert not process.is_alive()
+
+        # Check log file
+        lines = self.get_log_lines(tmp_dir)
+        count = len(lines)
+        assert count == 1
+        assert log_func in lines[0]
+        assert level in lines[0]
+        assert log_str in lines[0]
 
 # Main #
 if __name__ == '__main__':

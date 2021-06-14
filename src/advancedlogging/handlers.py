@@ -19,6 +19,8 @@ import logging
 from logging import Handler
 import logging.handlers
 from logging.handlers import QueueListener
+from multiprocessing import Event
+from pickle import PickleError
 from queue import Empty
 import time
 import warnings
@@ -170,13 +172,80 @@ class LogListener(BaseObject, QueueListener):
         _thread: The thread which the listener is running on.
         respect_handler_level (bool): Determines if this object will check the level of each message to the handler’s.
 
+        async_loop: The event loop to assign the async methods to.
+        _is_async (bool): Determines if this object will be asynchronous.
+        alive_event (:obj:``Event): The Event that determines if alive.
+        terminate_event (:obj:`Event`): The Event used to stop the task loop.
+
     Args:
         queue (:obj:`Queue`): The queue to get the LogRecords from.
         *handlers (:obj:`Handler`): The handlers to handle the incoming LogRecords.
         respect_handler_level (bool): Determines if this object will check the level of each message to the handler’s.
     """
 
+    # Construction/Destruction
+    def __init__(self, queue, *handlers, respect_handler_level=False):
+        super().__init__(queue, *handlers, respect_handler_level=respect_handler_level)
+        self.async_loop = asyncio.get_event_loop()
+        self._is_async = True
+        self.alive_event = Event()
+        self.terminate_event = Event()
+
+    @property
+    def is_async(self):
+        """bool: If this object is asynchronous. It will detect if it asynchronous while running.
+
+        When set it will raise an error if the Task is running.
+        """
+        if self.is_alive():
+            if self._thread is not None:
+                return False
+            else:
+                return True
+        else:
+            return self._is_async
+
+    @is_async.setter
+    def is_async(self, value):
+        self._is_async = value
+        if self.is_alive():
+            raise ValueError("cannot set is_async while LogListener is running.")
+
+    # Pickling
+    def __getstate__(self):
+        """Creates a dictionary of attributes which can be used to rebuild this object
+
+        Returns:
+            dict: A dictionary of this object's attributes.
+        """
+        if self.is_alive():
+            raise PickleError("Cannot pickle while alive")
+        out_dict = self.__dict__.copy()
+        out_dict["safe_handlers"] = pickle_safe_handlers(self.handlers)
+        del out_dict["async_loop"], out_dict["handlers"]
+        return out_dict
+
+    def __setstate__(self, in_dict):
+        """Builds this object based on a dictionary of corresponding attributes.
+
+        Args:
+            in_dict (dict): The attributes to build this object from.
+        """
+        in_dict["handlers"] = unpickle_safe_handlers(in_dict.pop("safe_handlers"))
+        in_dict["async_loop"] = asyncio.get_event_loop()
+        self.__dict__ = in_dict
+
     # Methods
+    # State
+    def is_alive(self):
+        """Checks if this object is currently running.
+
+        Returns:
+            bool: If this object is currently running.
+        """
+        return self.alive_event.is_set()
+
+    # Listening
     async def dequeue_async(self, timeout=None, interval=0.0):
         """Asynchronously, get an item from the queue.
 
@@ -199,11 +268,38 @@ class LogListener(BaseObject, QueueListener):
 
         return self.queue.get()
 
+    def _monitor(self):
+        """
+        Monitor the queue for records, and ask the handler
+        to deal with them.
+
+        This method runs on a separate, internal thread.
+        The thread will terminate if it sees a sentinel object in the queue.
+        """
+        q = self.queue
+        has_task_done = hasattr(q, 'task_done')
+
+        while not self.terminate_event.is_set():
+            try:
+                record = self.dequeue(True)
+                if record is self._sentinel:
+                    if has_task_done:
+                        q.task_done()
+                    break
+                self.handle(record)
+                if has_task_done:
+                    q.task_done()
+            except Empty:
+                break
+
+        self.alive_event.clear()
+
     async def _monitor_async(self):
         """Asynchronously monitor the queue for records and ask the handler to deal with them."""
         q = self.queue
         has_task_done = hasattr(q, 'task_done')
-        while True:
+
+        while not self.terminate_event.is_set():
             try:
                 record = await self.dequeue_async()
                 if record is self._sentinel:
@@ -216,3 +312,116 @@ class LogListener(BaseObject, QueueListener):
             except Empty:
                 break
 
+        self.alive_event.clear()
+
+    # Joins
+    def join_normal(self, timeout=None):
+        """Wait until this object terminates and determines if the async version should be run.
+
+        Args:
+            timeout (float): The time in seconds to wait for termination.
+        """
+        if self.is_async:
+            start_time = time.perf_counter()
+            while self.alive_event.is_set():
+                if timeout is not None and (time.perf_counter() - start_time) >= timeout:
+                    warnings.warn(TimeoutWarning("'join_normal'"), stacklevel=2)
+                    return
+        else:
+            self._thread.join(timeout)
+
+    async def join_async(self, timeout=None, interval=0.0):
+        """Asynchronously wait until this object terminates.
+
+        Args:
+            timeout (float): The time in seconds to wait for termination.
+            interval (float): The time in seconds between termination checks. Zero means it will check ASAP.
+        """
+        if self.is_async:
+            start_time = time.perf_counter()
+            while self.alive_event.is_set():
+                await asyncio.sleep(interval)
+                if timeout is not None and (time.perf_counter() - start_time) >= timeout:
+                    warnings.warn(TimeoutWarning("'join_async'"), stacklevel=2)
+                    return
+        else:
+            self._thread.join(timeout)
+
+    def join_async_task(self, timeout=None, interval=0.0):
+        """Creates waiting for this object to terminate as an asyncio task.
+
+        Args:
+            timeout (float): The time in seconds to wait for termination.
+            interval (float): The time in seconds between termination checks. Zero means it will check ASAP.
+        """
+        return asyncio.create_task(self.join_async(timeout, interval))
+
+    def join(self, asyn=False, timeout=None, interval=0.0):
+        """Wait until this object terminates and determines if the async version should be run.
+
+        Args:
+            asyn (bool): Determines if the join will be asynchronous.
+            timeout (float): The time in seconds to wait for termination.
+            interval (float): The time in seconds between termination checks. Zero means it will check ASAP.
+        """
+        # Use Correct Context
+        if asyn:
+            return self.join_async_task(timeout, interval)
+        else:
+            self.join_normal(timeout)
+            return None
+
+    # Execution
+    def start(self):
+        """Start the listener as either a thread or async loop."""
+        if self.is_alive():
+            raise RuntimeError("LogListener is already running.")
+
+        self.alive_event.set()
+
+        if not self.is_async:
+            super().start()
+        else:
+            asyncio.run(self._monitor_async())
+
+    def start_async_task(self):
+        """Creates the continuous execution of the listener as an asyncio task."""
+        if self.is_alive():
+            raise RuntimeError("LogListener is already running.")
+
+        self._is_async = True
+        self.alive_event.set()
+
+        return asyncio.create_task(self._monitor_async())
+
+    def stop(self, join=True, asyn=False, timeout=None, interval=0.0):
+        """Stop the listener.
+
+        Args:
+            join (bool): Determines if terminate will wait for the object to join.
+            asyn (bool): Determines if the join will be asynchronous.
+            timeout (float): The time in seconds to wait for termination.
+            interval (float): The time in seconds between termination checks. Zero means it will check ASAP.
+
+        Returns:
+            Can return None or an async_io task object if this function is called with async on.
+        """
+        self.enqueue_sentinel()
+        if join:
+            self.join(asyn, timeout, interval)
+
+    def terminate(self, join=False, asyn=False, timeout=None, interval=0.0):
+        """Flags the task loop and task to stop running.
+
+        Args:
+            join (bool): Determines if terminate will wait for the object to join.
+            asyn (bool): Determines if the join will be asynchronous.
+            timeout (float): The time in seconds to wait for termination.
+            interval (float): The time in seconds between termination checks. Zero means it will check ASAP.
+
+        Returns:
+            Can return None or an async_io task object if this function is called with async on.
+        """
+        self.terminate_event.set()
+        if join:
+            return self.join(asyn, timeout, interval)
