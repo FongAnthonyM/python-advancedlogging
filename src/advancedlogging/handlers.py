@@ -156,6 +156,9 @@ class FileHandler(logging.FileHandler, PickableHandler):
 class QueueHandler(logging.handlers.QueueHandler, PickableHandler):
     pass
 
+# Todo: Create a SimpleQueueHandler with locked access to the send front end.
+
+
 # Todo: Create an h5 handler
 
 
